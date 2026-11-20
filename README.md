@@ -1,4 +1,4 @@
-﻿# ResearchMate
+﻿# Research Insights AI
 
 **An AI research assistant for conversational chat, PDF question answering, and research paper discovery.**
 
