@@ -1,0 +1,123 @@
+name: Deploy ResearchMate
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff
+        run: ruff check .
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Tests
+        run: python -m pytest -v
+
+  deploy:
+    needs: [lint, test]
+
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'Deploy it')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -e
+
+            cd ~/ResearchMate
+
+            git fetch origin
+            git reset --hard origin/main
+
+            # Build React frontend
+            cd react-frontend
+
+            test -f .env || {
+              echo "React .env file is missing."
+              exit 1
+            }
+
+            npm ci
+            npm run build
+
+            # Publish React production files
+            sudo mkdir -p /var/www/researchmate
+            sudo rsync -a --delete dist/ /var/www/researchmate/
+            sudo chown -R www-data:www-data /var/www/researchmate
+
+            # Restart FastAPI backend
+            sudo systemctl restart researchmate_backend
+
+            # Validate Nginx
+            sudo nginx -t
+
+      - name: Smoke Test Backend
+        run: |
+          for i in {1..12}; do
+            if curl --fail --silent --show-error --max-time 10 https://api.researchmate.me/health; then
+              echo "Backend is healthy."
+              exit 0
+            fi
+
+            echo "Backend not ready. Retrying in 5 seconds..."
+            sleep 5
+          done
+
+          echo "Backend health check failed."
+          exit 1
+
+      - name: Smoke Test Frontend
+        run: |
+          for i in {1..12}; do
+            if curl --fail --silent --show-error --max-time 10 https://researchmate.me/ > /dev/null; then
+              echo "React frontend is reachable."
+              exit 0
+            fi
+
+            echo "Frontend not ready. Retrying in 5 seconds..."
+            sleep 5
+          done
+
+          echo "Frontend health check failed."
+          exit 1
