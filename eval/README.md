@@ -307,6 +307,4 @@ print(f"Reference answer: {benchmark.get_reference_answer(query_id)}")
 
 ---
 
-## 📜 License
 
-This evaluation module is part of the ResearchMate project.
