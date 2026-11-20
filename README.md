@@ -119,4 +119,4 @@ The [evaluation code](eval/) loads an Open RAG Benchmark-style arXiv dataset fro
 | Grounded ratio | Fraction of evaluated answers with overlap at or above the code's **0.20** threshold. |
 
 
-ResearchMate is released under the [MIT License](LICENSE), copyright Mitesh Gupta.
+
